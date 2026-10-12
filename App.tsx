@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StatusBar, Text, TextInput, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { SQLiteProvider } from 'expo-sqlite';
@@ -6,6 +6,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Icon, Logo, GameCover, ProgressBar, StatusBadge, StatTile } from './src/components';
 import { C, styles, statusColor } from './src/styles';
 import { DISCOVER_PICKS } from './src/sample';
+import {fetchFeaturedPc,searchSteamGames,normalizedTitle} from './src/steam';
+import type {SteamListing} from './src/steam';
 import { initializeDatabase } from './src/db';
 import { pickBackup, shareBackup } from './src/backupIO';
 import { StoreProvider, useStore } from './src/store';
@@ -70,7 +72,7 @@ function Home({open,go,add}: {open:(g:Game)=>void;go:(tab:Tab)=>void;add:()=>voi
     {recent ? <Pressable onPress={()=>open(recent)} style={{borderRadius:25,overflow:'hidden',borderWidth:1,borderColor:C.stroke}}>
       <LinearGradient colors={[recent.cover_color,'#1A1B37','#0F1422']} style={{padding:23,minHeight:204,justifyContent:'space-between'}}>
         <View style={{flexDirection:'row',justifyContent:'space-between'}}><Txt color="#F2EFFF" size={10} weight="900" style={{letterSpacing:2}}>FEATURED GAME</Txt><StatusBadge status={recent.status}/></View>
-        <View><Txt size={26} weight="900">{recent.title}</Txt><Txt color="#CDD0DF" size={12} style={{marginTop:6}}>{recent.platform}  ·  {recent.genre}</Txt><Spacer h={15}/><ProgressBar progress={recent.progress} color={C.green} height={7}/><Spacer h={8}/><Txt size={11} color="#DCDFF0">{recent.progress}% completion</Txt></View>
+        <View style={{flexDirection:'row',alignItems:'flex-end',gap:13}}><View style={{flex:1}}><Txt size={23} weight="900">{recent.title}</Txt><Txt color="#CDD0DF" size={12} style={{marginTop:6}}>{recent.platform}  ·  {recent.genre}</Txt><Spacer h={15}/><ProgressBar progress={recent.progress} color={C.green} height={7}/><Spacer h={8}/><Txt size={11} color="#DCDFF0">{recent.progress}% completion</Txt></View><GameCover game={recent} width={92} height={126}/></View>
       </LinearGradient>
     </Pressable>: <Empty title="Your adventure starts here" description="Add your first game to create your collection."/>}
     <Spacer h={27}/><Section title="Currently playing"/>
@@ -92,22 +94,91 @@ function Library({open,add}: {open:(g:Game)=>void;add:()=>void}) {
 function Discover({open,create}: {open:(g:Game)=>void;create:(input:GameInput)=>Promise<void>}) {
   const {games}=useStore();
   const [adding,setAdding]=useState<string|null>(null);
+  const [featured,setFeatured]=useState<SteamListing[]>([]);
+  const [results,setResults]=useState<SteamListing[]>([]);
+  const [query,setQuery]=useState('');
+  const [loading,setLoading]=useState(true);
+  const [searching,setSearching]=useState(false);
+  const [onlineError,setOnlineError]=useState('');
+  const [searchError,setSearchError]=useState('');
+  useEffect(()=>{
+    let active=true;
+    void fetchFeaturedPc().then(items=>{if(active){setFeatured(items);setOnlineError(items.length?'':'No PC games were returned by Steam.');}})
+      .catch(()=>{if(active)setOnlineError('Steam recommendations are temporarily unavailable. Your library and offline suggestions still work.');})
+      .finally(()=>{if(active)setLoading(false);});
+    return ()=>{active=false;};
+  },[]);
+  useEffect(()=>{
+    let active=true;
+    if(query.trim().length<2){setResults([]);setSearching(false);setSearchError('');return()=>{active=false;};}
+    setSearching(true);
+    const timer=setTimeout(()=>{
+      void searchSteamGames(query).then(items=>{if(active){setResults(items);setSearchError('');}})
+        .catch(()=>{if(active){setResults([]);setSearchError('Could not search Steam. Check your internet connection.');}})
+        .finally(()=>{if(active)setSearching(false);});
+    },450);
+    return ()=>{active=false;clearTimeout(timer);};
+  },[query]);
   const add=async(input:GameInput)=>{if(adding)return;setAdding(input.title);try{await create(input);}catch(e){Alert.alert('Unable to add',String(e));}finally{setAdding(null);}};
-  return <ScrollView style={styles.screen} contentContainerStyle={styles.body}>
-    <Header subtitle="Handpicked inspiration" title="Discover"/>
-    <View style={{...styles.card,backgroundColor:'#1B2039',marginBottom:25}}><Icon name="sparkles-outline" size={25} color={C.purple}/><Spacer h={11}/><Txt weight="900" size={18}>Find your next favorite</Txt><Spacer h={7}/><Txt color={C.muted} size={13} style={{lineHeight:21}}>Explore these starter suggestions and add them to your collection. This list works offline. A searchable online game catalog is planned for a future release.</Txt></View>
-    <Section title="Recommended games"/>
-    {DISCOVER_PICKS.map(p=>{
-      const already=games.find(g=>g.title.toLowerCase()===p.title.toLowerCase());
-      return <View key={p.title} style={{...styles.card,flexDirection:'row',gap:14,alignItems:'center',marginBottom:12}}>
-        <GameCover game={p} width={79} height={103}/>
-        <View style={{flex:1,gap:8}}><Txt weight="900" size={15}>{p.title}</Txt><Txt color={C.muted} size={12}>{p.genre}</Txt><Txt color={C.dim} size={11}>{p.platform}</Txt>
-          <Pressable onPress={()=>already?open(already):void add(p)} disabled={adding===p.title} style={{backgroundColor:already?C.surface2:C.purple,borderRadius:10,paddingVertical:9,paddingHorizontal:10,alignSelf:'flex-start'}}>
-            <Txt size={12} weight="bold" color={already?C.white:'#160E29'}>{already?'View in library':adding===p.title?'Adding…':'+ Add to library'}</Txt>
-          </Pressable>
-        </View>
-      </View>;
-    })}
+  const lookup=games.map(g=>normalizedTitle(g.title));
+  const resultMode=query.trim().length>=2;
+  const items=resultMode?results:featured;
+  const top=items.filter(g=>!lookup.includes(normalizedTitle(g.title)));
+  const renderListing=(p:SteamListing)=>{
+    const already=games.find(g=>normalizedTitle(g.title)===normalizedTitle(p.title));
+    return <View key={p.id} style={{...styles.card,flexDirection:'row',gap:14,alignItems:'center',marginBottom:12}}>
+      <GameCover game={{title:p.title,genre:p.genre,cover_color:p.cover_color,cover_url:p.imageUrl}} width={79} height={103}/>
+      <View style={{flex:1,gap:7}}><Txt weight="900" size={15}>{p.title}</Txt><Txt color={C.muted} size={12}>{p.category}</Txt><Txt color={C.dim} size={11}>PC · Steam listing</Txt>
+        <Pressable onPress={()=>already?open(already):void add({title:p.title,genre:p.genre,platform:'PC',status:'wishlist',cover_color:p.cover_color,cover_url:p.imageUrl})} disabled={adding===p.title}
+          style={{backgroundColor:already?C.surface2:C.purple,borderRadius:10,paddingVertical:9,paddingHorizontal:10,alignSelf:'flex-start'}}>
+          <Txt size={12} weight="bold" color={already?C.white:'#160E29'}>{already?'View in library':adding===p.title?'Adding…':'+ Add to wishlist'}</Txt>
+        </Pressable>
+      </View>
+    </View>;
+  };
+  return <ScrollView style={styles.screen} contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
+    <Header subtitle="Explore the world of PC gaming" title="Discover"/>
+    <View style={{...styles.card,backgroundColor:'#1B2039',marginBottom:21}}>
+      <Icon name="sparkles-outline" size={25} color={C.purple}/><Spacer h={9}/>
+      <Txt weight="900" size={18}>Discover PC games automatically</Txt><Spacer h={6}/>
+      <Txt color={C.muted} size={13} style={{lineHeight:20}}>Popular PC games and new releases from Steam. Search by name and save games to your own offline collection. No Steam account required.</Txt>
+    </View>
+    <TextInput style={styles.textInput} placeholder="Search Steam PC games…" placeholderTextColor={C.dim} autoCapitalize="none" autoCorrect={false} value={query} onChangeText={setQuery}/>
+    <Spacer h={19}/>
+    <Section title={resultMode?'Steam search results':'Trending & new PC games'} right={loading||searching?<ActivityIndicator color={C.purple}/>:undefined}/>
+    {resultMode ? (
+      searchError?<Txt color={C.amber} size={12} style={{marginBottom:14}}>{searchError}</Txt>:
+      searching?<Txt color={C.muted} size={12} style={{marginBottom:15}}>Searching Steam…</Txt>:
+      results.length===0?<Empty title="No matching games" description="Try the exact PC game title or a shorter search." icon="search-outline"/>:results.map(renderListing)
+    ) : (
+      <>
+        {onlineError?<Txt color={C.amber} size={12} style={{lineHeight:19,marginBottom:14}}>{onlineError}</Txt>:null}
+        {featured.length>0 ? (
+          <>
+            <Txt color={C.muted} size={12} style={{marginBottom:15}}>{featured.length} live PC listings · excludes games already in your library</Txt>
+            {top.length>0?top.map(renderListing):<Empty title="You're up to date" description="You've already added these recommendations to your collection."/>}
+          </>
+        ):loading?<Txt color={C.muted} size={12}>Loading new PC games…</Txt>:(
+          <>
+            <Section title="Offline suggestions"/>
+            {DISCOVER_PICKS.map(p=>{
+              const already=games.find(g=>normalizedTitle(g.title)===normalizedTitle(p.title));
+              return <View key={p.title} style={{...styles.card,flexDirection:'row',gap:14,alignItems:'center',marginBottom:12}}>
+                <GameCover game={p} width={79} height={103}/>
+                <View style={{flex:1,gap:8}}><Txt weight="900" size={15}>{p.title}</Txt><Txt color={C.muted} size={12}>{p.genre}</Txt>
+                  <Pressable onPress={()=>already?open(already):void add({...p,platform:'PC'})} disabled={adding===p.title}
+                    style={{backgroundColor:already?C.surface2:C.purple,borderRadius:10,paddingVertical:9,paddingHorizontal:10,alignSelf:'flex-start'}}>
+                    <Txt size={12} weight="bold" color={already?C.white:'#160E29'}>{already?'View in library':adding===p.title?'Adding…':'+ Add to wishlist'}</Txt>
+                  </Pressable>
+                </View>
+              </View>;
+            })}
+          </>
+        )}
+      </>
+    )}
+    <Spacer h={18}/>
+    <Txt color={C.dim} size={11} style={{lineHeight:18}}>Steam storefront listings are for discovery, not an indication that you own the game. Game availability and artwork require internet. Your saved collection remains offline.</Txt>
   </ScrollView>;
 }
 function Activity({open}: {open:(g:Game)=>void}) {
