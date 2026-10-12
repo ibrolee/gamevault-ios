@@ -6,7 +6,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Icon, Logo, GameCover, ProgressBar, StatusBadge, StatTile } from './src/components';
 import { C, styles, statusColor } from './src/styles';
 import { DISCOVER_PICKS } from './src/sample';
-import {fetchFeaturedPc,searchSteamGames,normalizedTitle} from './src/steam';
+import {fetchFeaturedPc,searchSteamGames,normalizedTitle,enrichPcRecommendations,rankPcRecommendations} from './src/steam';
 import type {SteamListing} from './src/steam';
 import { initializeDatabase } from './src/db';
 import { pickBackup, shareBackup } from './src/backupIO';
@@ -101,13 +101,22 @@ function Discover({open,create}: {open:(g:Game)=>void;create:(input:GameInput)=>
   const [searching,setSearching]=useState(false);
   const [onlineError,setOnlineError]=useState('');
   const [searchError,setSearchError]=useState('');
+  const [refreshCount,setRefreshCount]=useState(0);
+  const [enriching,setEnriching]=useState(false);
   useEffect(()=>{
-    let active=true;
-    void fetchFeaturedPc().then(items=>{if(active){setFeatured(items);setOnlineError(items.length?'':'No PC games were returned by Steam.');}})
-      .catch(()=>{if(active)setOnlineError('Steam recommendations are temporarily unavailable. Your library and offline suggestions still work.');})
-      .finally(()=>{if(active)setLoading(false);});
+    let active=true;setLoading(true);setOnlineError('');
+    void fetchFeaturedPc(refreshCount>0).then(async items=>{
+      if(!active)return;
+      setFeatured(items);setOnlineError(items.length?'':'No PC games were returned by Steam.');
+      setLoading(false);
+      if(items.length){
+        setEnriching(true);
+        try{const enriched=await enrichPcRecommendations(items);if(active)setFeatured(enriched);}
+        finally{if(active)setEnriching(false);}
+      }
+    }).catch(()=>{if(active){setLoading(false);setOnlineError('Steam recommendations are temporarily unavailable. Your library and offline suggestions still work.');}});
     return ()=>{active=false;};
-  },[]);
+  },[refreshCount]);
   useEffect(()=>{
     let active=true;
     if(query.trim().length<2){setResults([]);setSearching(false);setSearchError('');return()=>{active=false;};}
@@ -123,12 +132,13 @@ function Discover({open,create}: {open:(g:Game)=>void;create:(input:GameInput)=>
   const lookup=games.map(g=>normalizedTitle(g.title));
   const resultMode=query.trim().length>=2;
   const items=resultMode?results:featured;
-  const top=items.filter(g=>!lookup.includes(normalizedTitle(g.title)));
+  const top=rankPcRecommendations(items,games);
+  const personalized=games.some(g=>g.favorite||g.status==='playing'||g.status==='completed')&&featured.some(g=>g.genre!=='PC game');
   const renderListing=(p:SteamListing)=>{
     const already=games.find(g=>normalizedTitle(g.title)===normalizedTitle(p.title));
     return <View key={p.id} style={{...styles.card,flexDirection:'row',gap:14,alignItems:'center',marginBottom:12}}>
       <GameCover game={{title:p.title,genre:p.genre,cover_color:p.cover_color,cover_url:p.imageUrl}} width={79} height={103}/>
-      <View style={{flex:1,gap:7}}><Txt weight="900" size={15}>{p.title}</Txt><Txt color={C.muted} size={12}>{p.category}</Txt><Txt color={C.dim} size={11}>PC · Steam listing</Txt>
+      <View style={{flex:1,gap:7}}><Txt weight="900" size={15}>{p.title}</Txt><Txt color={C.muted} size={12}>{p.genre==='PC game'?p.category:p.genre}</Txt><Txt color={C.dim} size={11}>PC · {p.category}</Txt>
         <Pressable onPress={()=>already?open(already):void add({title:p.title,genre:p.genre,platform:'PC',status:'wishlist',cover_color:p.cover_color,cover_url:p.imageUrl})} disabled={adding===p.title}
           style={{backgroundColor:already?C.surface2:C.purple,borderRadius:10,paddingVertical:9,paddingHorizontal:10,alignSelf:'flex-start'}}>
           <Txt size={12} weight="bold" color={already?C.white:'#160E29'}>{already?'View in library':adding===p.title?'Adding…':'+ Add to wishlist'}</Txt>
@@ -145,7 +155,7 @@ function Discover({open,create}: {open:(g:Game)=>void;create:(input:GameInput)=>
     </View>
     <TextInput style={styles.textInput} placeholder="Search Steam PC games…" placeholderTextColor={C.dim} autoCapitalize="none" autoCorrect={false} value={query} onChangeText={setQuery}/>
     <Spacer h={19}/>
-    <Section title={resultMode?'Steam search results':'Trending & new PC games'} right={loading||searching?<ActivityIndicator color={C.purple}/>:undefined}/>
+    <Section title={resultMode?'Steam search results':personalized?'Picked for your library':'Trending & new PC games'} right={loading||searching?<ActivityIndicator color={C.purple}/>:<Pressable accessibilityRole="button" accessibilityLabel="Refresh PC game recommendations" onPress={()=>setRefreshCount(n=>n+1)} style={{paddingVertical:7,paddingHorizontal:11,flexDirection:'row',alignItems:'center',gap:6}}><Icon name="refresh-outline" size={16} color={C.purple}/><Txt color={C.purple} size={12} weight="bold">Refresh</Txt></Pressable>}/>
     {resultMode ? (
       searchError?<Txt color={C.amber} size={12} style={{marginBottom:14}}>{searchError}</Txt>:
       searching?<Txt color={C.muted} size={12} style={{marginBottom:15}}>Searching Steam…</Txt>:
@@ -155,7 +165,7 @@ function Discover({open,create}: {open:(g:Game)=>void;create:(input:GameInput)=>
         {onlineError?<Txt color={C.amber} size={12} style={{lineHeight:19,marginBottom:14}}>{onlineError}</Txt>:null}
         {featured.length>0 ? (
           <>
-            <Txt color={C.muted} size={12} style={{marginBottom:15}}>{featured.length} live PC listings · excludes games already in your library</Txt>
+            <Txt color={C.muted} size={12} style={{marginBottom:15}}>{featured.length} live PC listings · {enriching?'Checking genres for recommendations…':personalized?'ordered by your favorite genres':'popular, new and on sale'} · excludes games already in your library</Txt>
             {top.length>0?top.map(renderListing):<Empty title="You're up to date" description="You've already added these recommendations to your collection."/>}
           </>
         ):loading?<Txt color={C.muted} size={12}>Loading new PC games…</Txt>:(
