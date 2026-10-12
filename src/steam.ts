@@ -8,6 +8,8 @@ type SearchItem={id?:number;name?:string;tiny_image?:string;type?:string};
 type FeaturedItem={id?:number;name?:string;header_image?:string;windows_available?:boolean};
 const ORIGIN='https://store.steampowered.com/api';
 const cache=new Map<string,{expires:number;value:Promise<SteamListing[]>}>();
+const detailCache=new Map<number,Promise<SteamDetail|null>>();
+export type SteamDetail={id:number;genre:string;headerImage:string;windows:boolean};
 const portrait=(id:number)=>`https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${id}/library_600x900.jpg`;
 const header=(id:number)=>`https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${id}/header.jpg`;
 const safeHttps=(v:unknown)=>typeof v==='string'&&v.startsWith('https://')?v:'';
@@ -56,7 +58,7 @@ function remembered(key:string,ttl:number,load:()=>Promise<SteamListing[]>):Prom
   cache.set(key,{expires:now+ttl,value:promise});
   return promise;
 }
-export const fetchFeaturedPc=()=>remembered('featured',1000*60*30,async()=>parseSteamFeatured(await requestJson(ORIGIN+'/featuredcategories/?cc=us&l=english')));
+export const fetchFeaturedPc=(force=false)=>{if(force)cache.delete('featured');return remembered('featured',1000*60*30,async()=>parseSteamFeatured(await requestJson(ORIGIN+'/featuredcategories/?cc=us&l=english')));};
 export const searchSteamGames=(query:string)=>{
   const term=query.trim();
   if(term.length<2)return Promise.resolve([] as SteamListing[]);
@@ -69,4 +71,62 @@ export async function findSteamCover(title:string):Promise<{imageUrl:string;fall
   const results=await searchSteamGames(title);
   const match=results.find(g=>normalizedTitle(g.title)===normalizedTitle(title));
   return match?{imageUrl:match.imageUrl,fallbackUrl:match.fallbackUrl}:null;
+}
+
+/** Metadata enrichment for a small, bounded selection of current PC games.
+ * All requests use public storefront data. Failures never block Discover.
+ */
+export function parseSteamDetail(id:number,payload:unknown):SteamDetail|null{
+  if(!validId(id)||!payload||typeof payload!=='object')return null;
+  const item=(payload as Record<string,unknown>)[String(id)];
+  if(!item||typeof item!=='object')return null;
+  const result=item as {success?:boolean;data?:{type?:string;name?:string;genres?:{description?:string}[];header_image?:string;platforms?:{windows?:boolean}}};
+  if(!result.success||!result.data||result.data.type!=='game'||result.data.platforms?.windows===false)return null;
+  const genres=Array.isArray(result.data.genres)?result.data.genres.map(g=>g?.description).filter((g):g is string=>typeof g==='string'&&g.length>0).slice(0,3):[];
+  return {id,genre:genres.join(' / ')||'PC game',headerImage:safeHttps(result.data.header_image),windows:true};
+}
+export function getSteamDetail(id:number):Promise<SteamDetail|null>{
+  if(!validId(id))return Promise.resolve(null);
+  const cached=detailCache.get(id);if(cached)return cached;
+  const promise=requestJson(ORIGIN+'/appdetails/?appids='+id+'&cc=us&l=english')
+    .then(data=>parseSteamDetail(id,data)).catch(()=>null);
+  detailCache.set(id,promise);
+  return promise;
+}
+export async function enrichPcRecommendations(items:SteamListing[]):Promise<SteamListing[]>{
+  const select=new Set<number>();
+  for(const group of ['Popular on Steam','New on PC','On sale']){
+    items.filter(i=>i.category===group).slice(0,4).forEach(i=>select.add(i.id));
+  }
+  const chosen=items.filter(i=>select.has(i.id));
+  const extras=new Map<number,SteamDetail|null>();
+  // Limit concurrency to reduce rate limiting; detail failures leave original items intact.
+  for(let i=0;i<chosen.length;i+=3){
+    const batch=chosen.slice(i,i+3);
+    const resolved=await Promise.all(batch.map(x=>getSteamDetail(x.id)));
+    batch.forEach((x,j)=>extras.set(x.id,resolved[j]));
+  }
+  return items.map(item=>{
+    const data=extras.get(item.id);
+    return data?{...item,genre:data.genre,fallbackUrl:data.headerImage||item.fallbackUrl}:item;
+  });
+}
+type Taste={title:string;genre:string;status:string;favorite:number};
+const tokens=(s:string)=>s.toLowerCase().split(/[^a-z0-9]+/).filter(x=>x.length>2&&!['game','games','indie','open','world','playing','completed'].includes(x));
+export function rankPcRecommendations(items:SteamListing[],library:Taste[]):SteamListing[]{
+  const collected=new Set(library.map(g=>normalizedTitle(g.title)));
+  const tastes=new Map<string,number>();
+  for(const g of library){
+    if(g.status==='dropped')continue;
+    const weight=g.favorite?4:(g.status==='playing'||g.status==='completed'?3:1);
+    for(const word of new Set(tokens(g.genre)))tastes.set(word,(tastes.get(word)||0)+weight);
+  }
+  return items.filter(g=>!collected.has(normalizedTitle(g.title)))
+    .map((item,index)=>{
+      const genreScore=[...new Set(tokens(item.genre))].reduce((n,w)=>n+(tastes.get(w)||0),0);
+      const freshness=item.category==='New on PC'?2:item.category==='Popular on Steam'?1:0;
+      return {item,index,score:genreScore*3+freshness};
+    })
+    .sort((a,b)=>b.score-a.score||a.index-b.index)
+    .map(x=>x.item);
 }
