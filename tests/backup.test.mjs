@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict';
 import {createBackup,parseBackup} from '../src/backup.ts';
 const now=new Date().toISOString();
-const game={id:'g1',title:'Far Cry 6',platform:'ROG Ally',genre:'Action',status:'playing',progress:25,rating:4,notes:'',cover_color:'#BE4B38',favorite:1,is_sample:0,created_at:now,updated_at:now};
+const game={id:'g1',title:'Far Cry 6',platform:'ROG Ally',genre:'Action',status:'playing',progress:25,rating:4,notes:'',cover_color:'#BE4B38',cover_url:'https://example.com/image.jpg',favorite:1,is_sample:0,created_at:now,updated_at:now};
 const session={id:'s1',game_id:'g1',minutes:60,notes:'',played_at:now};
 const original=createBackup([game],[session]);const parsed=parseBackup(JSON.stringify(original));
-assert.equal(parsed.games.length,1);assert.equal(parsed.sessions[0].minutes,60);
+assert.equal(parsed.games.length,1);assert.equal(parsed.games[0].cover_url,game.cover_url);
+const legacy=parseBackup(JSON.stringify({...original,games:[((({cover_url,...rest})=>rest)(game))]}));assert.equal(legacy.games[0].cover_url,'');
+assert.throws(()=>parseBackup(JSON.stringify({...original,games:[{...game,cover_url:'http://insecure.example/art.jpg'}]})),/game/i);assert.equal(parsed.sessions[0].minutes,60);
 assert.throws(()=>parseBackup('not json'),/JSON/i);
 assert.throws(()=>parseBackup(JSON.stringify({...original,version:2})),/backup/i);
 assert.throws(()=>parseBackup(JSON.stringify({...original,games:[game,game]})),/invalid/i);
