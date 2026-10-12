@@ -1,0 +1,10 @@
+import assert from 'node:assert/strict';
+import {parseGameVaultImport} from '../src/previewBackup.ts';
+const now=new Date().toISOString();
+const payload={games:[{id:'g1',title:'Far Cry 6',platform:'PC',genre:'Action',status:'playing',progress:30,rating:4,notes:'sample',favorite:true,c1:'#AB1234'}],sessions:[{id:'s1',gameId:'g1',minutes:45,notes:'good',date:now}]};
+const migrated=parseGameVaultImport(JSON.stringify(payload));
+assert.equal(migrated.games[0].favorite,1);assert.equal(migrated.games[0].is_sample,0);assert.equal(migrated.games[0].cover_color,'#AB1234');
+assert.equal(migrated.sessions[0].game_id,'g1');
+assert.throws(()=>parseGameVaultImport(JSON.stringify({...payload,sessions:[{...payload.sessions[0],gameId:'missing'}]})),/session/i);
+assert.throws(()=>parseGameVaultImport('{'),/JSON/i);
+console.log('PASS: Safari preview to native backup migration');

@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+const app=JSON.parse(fs.readFileSync(new URL('../app.json',import.meta.url),'utf8')).expo;
+const eas=JSON.parse(fs.readFileSync(new URL('../eas.json',import.meta.url),'utf8'));
+const pkg=JSON.parse(fs.readFileSync(new URL('../package.json',import.meta.url),'utf8'));
+assert.deepEqual(app.platforms,['ios']);assert.equal(app.ios.supportsTablet,false);
+assert.match(app.ios.bundleIdentifier,/^[\w-]+(?:\.[\w-]+)+$/);
+assert.equal(app.ios.infoPlist.ITSAppUsesNonExemptEncryption,false);
+assert.equal(eas.build.production.distribution,'store');
+assert.equal(eas.build.production.autoIncrement,'buildNumber');
+assert.ok(pkg.dependencies['expo-sqlite']);assert.ok(pkg.scripts.testflight);
+console.log('PASS: iOS-only configuration and TestFlight build profile');
