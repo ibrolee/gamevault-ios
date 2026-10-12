@@ -25,4 +25,4 @@ function makeIcon(size){const raw=Buffer.alloc((size*3+1)*size);const k=size/102
  return Buffer.concat([Buffer.from([137,80,78,71,13,10,26,10]),chunk('IHDR',ihdr),chunk('IDAT',zlib.deflateSync(raw,{level:9})),chunk('IEND',Buffer.alloc(0))]);}
 function ensureArtwork(){fs.mkdirSync(assets,{recursive:true});
  for(const [name,size] of [['icon.png',1024],['splash.png',1284]]){const file=path.join(assets,name);if(!fs.existsSync(file))fs.writeFileSync(file,makeIcon(size));}}
-module.exports=({config})=>{ensureArtwork();return {...config,icon:'./assets/icon.png',splash:{image:'./assets/splash.png',resizeMode:'contain',backgroundColor:'#080B14'}};};
+module.exports=({config})=>{ensureArtwork();return {...config,icon:'./assets/icon.png'};};
