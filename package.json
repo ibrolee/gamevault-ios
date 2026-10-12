@@ -1,6 +1,6 @@
 {
   "name": "gamevault",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "private": true,
   "main": "node_modules/expo/AppEntry.js",
   "scripts": {
@@ -10,8 +10,9 @@
     "doctor": "expo-doctor",
     "test:backup": "node --experimental-strip-types tests/backup.test.mjs && node --experimental-strip-types tests/previewBackup.test.mjs",
     "test:config": "node tests/config.test.mjs",
-    "preflight": "npm run test:backup && npm run test:config && npm run check && npx expo-doctor",
-    "testflight": "npx testflight"
+    "preflight": "npm run test:backup && npm run test:config && npm run test:steam && npm run check && npx expo-doctor",
+    "testflight": "npx testflight",
+    "test:steam": "node --experimental-strip-types tests/steam.test.mjs"
   },
   "dependencies": {
     "expo": "~57.0.21",

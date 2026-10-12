@@ -16,5 +16,6 @@ jobs:
       - run: npm install --no-audit --no-fund
       - run: npm run test:backup
       - run: npm run test:config
+      - run: npm run test:steam
       - run: npm run check
       - run: npx expo-doctor

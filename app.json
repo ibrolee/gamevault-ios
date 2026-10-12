@@ -3,13 +3,13 @@
     "name": "GameVault",
     "slug": "gamevault",
     "scheme": "gamevault",
-    "version": "0.3.1",
+    "version": "0.4.0",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.ibrolee.gamevault",
-      "buildNumber": "1",
+      "buildNumber": "2",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }

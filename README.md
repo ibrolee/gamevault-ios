@@ -6,7 +6,10 @@ GameVault is an **iOS-only, offline-first gaming collection** app built with Rea
 - Home, Library, Discover, Activity, and Profile tabs
 - Add games and manage platforms, genres, statuses, favorites, ratings and progress
 - Log gaming sessions and review playtime
-- Discover suggestions that work offline
+- Live Steam PC recommendations: trending titles, new PC releases, and search (internet required)
+- Automatic real artwork lookups by game title with offline placeholders; Steam image assets may be unavailable for some games
+- Change artwork manually using in-app Steam search or an HTTPS image URL
+- Offline starter suggestions if Steam cannot be reached
 - Export your collection to a JSON backup; restore from the iPhone Files picker
 - Migrate data exported from the earlier [Safari design preview](https://gamevault-ios-preview.vercel.app)
 
@@ -19,6 +22,7 @@ Install Node.js 22+ and then run:
 npm install
 npm run test:backup
 npm run test:config
+npm run test:steam
 npm run check
 npx expo-doctor
 npx expo start
@@ -45,4 +49,4 @@ Expo project linking, Apple signing, an actual .ipa build and TestFlight submiss
 All live data resides in on-device SQLite. Backups are imported or exported by explicit action; Safari data does not sync automatically. Importing a backup replaces the local library, so export your existing data first.
 
 ## Source readiness
-The native source and EAS settings have been committed to this GitHub repository. Source tests cover backup validity, iOS-only settings, and Safari-preview migration. Full dependency installation and an iPhone build must still be verified.
+v0.4.0 adds live PC discovery and real game artwork. The native source and EAS settings have been committed to this GitHub repository. **Changes in GitHub do not appear in the installed TestFlight app until a new signed iOS build (0.4.0, build 2 or higher) is submitted and installed.** Steam discovery uses public, unofficial storefront endpoints that may change or be rate-limited. There is no automatic PC game ownership or installation scan. Source tests cover backup validity, iOS-only settings, and Safari-preview migration. Full dependency installation and an iPhone build must still be verified.
