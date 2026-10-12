@@ -1,0 +1,33 @@
+{
+  "name": "gamevault",
+  "version": "0.3.1",
+  "private": true,
+  "main": "node_modules/expo/AppEntry.js",
+  "scripts": {
+    "start": "expo start",
+    "ios": "expo start --ios",
+    "check": "tsc --noEmit",
+    "doctor": "expo-doctor",
+    "test:backup": "node --experimental-strip-types tests/backup.test.mjs && node --experimental-strip-types tests/previewBackup.test.mjs",
+    "test:config": "node tests/config.test.mjs",
+    "preflight": "npm run test:backup && npm run test:config && npm run check && npx expo-doctor",
+    "testflight": "npx testflight"
+  },
+  "dependencies": {
+    "expo": "~57.0.21",
+    "expo-sqlite": "~57.0.4",
+    "expo-linear-gradient": "~57.0.2",
+    "expo-status-bar": "~57.0.1",
+    "@expo/vector-icons": "^15.0.3",
+    "react": "19.2.3",
+    "react-native": "0.86.3",
+    "react-native-safe-area-context": "~5.7.0",
+    "expo-file-system": "~57.0.7",
+    "expo-document-picker": "~57.0.3",
+    "expo-sharing": "~57.0.19"
+  },
+  "devDependencies": {
+    "@types/react": "~19.2.2",
+    "typescript": "~6.0.3"
+  }
+}
