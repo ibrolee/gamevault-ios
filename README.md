@@ -25,10 +25,11 @@ npx expo start
 ```
 
 ## iPhone / TestFlight
-1. Sign in to your Expo account using [Expo Launch](https://launch.expo.dev/) on your iPhone, and connect **ibrolee/gamevault-ios**.
-2. Authorize your Apple Developer account through Expo's authentication flow.
-3. Build for **iOS** with the **production** profile in `eas.json`.
-4. Upload the signed build to TestFlight and complete Apple's beta review if required.
+1. Expo Launch currently requires a **public GitHub repository**. To switch visibility, open [GitHub repository settings](https://github.com/ibrolee/gamevault-ios/settings), then General → Danger Zone → Change repository visibility → Public. Public source code is visible to anyone; do not commit credentials or secrets.
+2. Sign in to your Expo account using [Expo Launch](https://launch.expo.dev/) on your iPhone, and enter **https://github.com/ibrolee/gamevault-ios**.
+3. Authorize your Apple Developer account through Expo's authentication flow.
+4. Build for **iOS** with the **production** profile in `eas.json`.
+5. Upload the signed build to TestFlight and complete Apple's beta review if required.
 
 If you use the CLI instead:
 
@@ -44,4 +45,4 @@ Expo project linking, Apple signing, an actual .ipa build and TestFlight submiss
 All live data resides in on-device SQLite. Backups are imported or exported by explicit action; Safari data does not sync automatically. Importing a backup replaces the local library, so export your existing data first.
 
 ## Source readiness
-The native source and EAS settings have been committed to this private repository. Source tests cover backup validity, iOS-only settings, and Safari-preview migration. Full dependency installation and an iPhone build must still be verified.
+The native source and EAS settings have been committed to this GitHub repository. Source tests cover backup validity, iOS-only settings, and Safari-preview migration. Full dependency installation and an iPhone build must still be verified.
